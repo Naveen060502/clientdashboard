@@ -79,7 +79,7 @@ st.title("🌾 IoT Paddy Field Monitoring Dashboard")
 # Load data from repo CSV
 @st.cache_data
 def load_data():
-    return pd.read_csv("iot_water_data.csv")
+    return pd.read_csv("iot_water_data_1.csv")
 
 df = load_data()
 
