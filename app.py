@@ -7,16 +7,15 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.pagesizes import landscape, A4
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib import colors
-from PIL import Image as PILImage
 import os
 
 # ---------------- PDF Helper ----------------
-def fig_to_pil_image(fig):
+def fig_to_bytesio(fig):
     buf = BytesIO()
     fig.savefig(buf, format='png', bbox_inches='tight')
     plt.close(fig)
     buf.seek(0)
-    return PILImage.open(buf)
+    return buf
 
 # ---------------- PDF Export ----------------
 def create_multi_client_pdf(df):
@@ -33,13 +32,13 @@ def create_multi_client_pdf(df):
 
     # Summary table
     total_farmers = df["FarmerID"].nunique()
-    fixed_devices_total = df[df["DeviceType"] == "Fixed"]["DeviceID"].nunique()
-    portable_devices_total = df[df["DeviceType"] == "Portable"]["DeviceID"].nunique()
+    fixed_devices_total = df[df["DeviceType"]=="Fixed"]["DeviceID"].nunique()
+    portable_devices_total = df[df["DeviceType"]=="Portable"]["DeviceID"].nunique()
 
     elements.append(Paragraph("IoT Paddy Field Dashboard Report", styles['Title']))
-    elements.append(Spacer(1, 12))
+    elements.append(Spacer(1,12))
     table_data = [
-        ["Metric", "Value"],
+        ["Metric","Value"],
         ["Total Farmers", total_farmers],
         ["Total Fixed Devices", fixed_devices_total],
         ["Total Portable Devices", portable_devices_total]
@@ -52,25 +51,35 @@ def create_multi_client_pdf(df):
         ("GRID", (0,0), (-1,-1), 0.5, colors.black),
     ]))
     elements.append(table)
-    elements.append(Spacer(1, 24))
+    elements.append(Spacer(1,24))
 
-    # Device Type Donuts (aggregate)
+    # Device Type Donuts side by side
     fixed_counts = df[df["DeviceType"]=="Fixed"].groupby("Client")["DeviceID"].nunique()
     portable_counts = df[df["DeviceType"]=="Portable"].groupby("Client")["DeviceID"].nunique()
 
-    if not fixed_counts.empty:
-        fig, ax = plt.subplots()
-        ax.pie(fixed_counts, labels=fixed_counts.index, autopct='%1.1f%%', startangle=90, wedgeprops={'width':0.4})
-        ax.set_title("Fixed Devices per Client")
-        elements.append(RLImage(fig_to_pil_image(fig), width=300, height=250))
+    if not fixed_counts.empty or not portable_counts.empty:
+        imgs = []
+        if not fixed_counts.empty:
+            fig, ax = plt.subplots()
+            ax.pie(fixed_counts, labels=fixed_counts.index, autopct='%1.1f%%', startangle=90, wedgeprops={'width':0.4})
+            ax.set_title("Fixed Devices per Client")
+            imgs.append(RLImage(fig_to_bytesio(fig), width=300, height=250))
+        else:
+            imgs.append(Spacer(300,250))
 
-    if not portable_counts.empty:
-        fig, ax = plt.subplots()
-        ax.pie(portable_counts, labels=portable_counts.index, autopct='%1.1f%%', startangle=90, wedgeprops={'width':0.4})
-        ax.set_title("Portable Devices per Client")
-        elements.append(RLImage(fig_to_pil_image(fig), width=300, height=250))
+        if not portable_counts.empty:
+            fig, ax = plt.subplots()
+            ax.pie(portable_counts, labels=portable_counts.index, autopct='%1.1f%%', startangle=90, wedgeprops={'width':0.4})
+            ax.set_title("Portable Devices per Client")
+            imgs.append(RLImage(fig_to_bytesio(fig), width=300, height=250))
+        else:
+            imgs.append(Spacer(300,250))
 
-    elements.append(Spacer(1, 24))
+        # Side by side table
+        table_side_by_side = Table([imgs], colWidths=[300,300])
+        table_side_by_side.setStyle(TableStyle([("ALIGN",(0,0),(-1,-1),"CENTER")]))
+        elements.append(table_side_by_side)
+        elements.append(Spacer(1,24))
 
     # Water Status Pie
     if "WaterStatus" in df.columns:
@@ -79,7 +88,7 @@ def create_multi_client_pdf(df):
             fig, ax = plt.subplots()
             ax.pie(status_counts, labels=status_counts.index, autopct='%1.1f%%', startangle=90)
             ax.set_title("Water Status Distribution")
-            elements.append(RLImage(fig_to_pil_image(fig), width=400, height=250))
+            elements.append(RLImage(fig_to_bytesio(fig), width=400, height=250))
 
     elements.append(PageBreak())
     doc.build(elements)
@@ -101,10 +110,8 @@ def load_data():
     file_path = "iot_water_data_1.csv"
     if os.path.exists(file_path):
         df = pd.read_csv(file_path)
-        # Convert timestamp
         if "Timestamp" in df.columns:
             df["Timestamp"] = pd.to_datetime(df["Timestamp"], errors='coerce')
-        # Ensure numeric lat/lon
         if "Latitude" in df.columns:
             df["Latitude"] = pd.to_numeric(df["Latitude"], errors='coerce')
         if "Longitude" in df.columns:
@@ -147,11 +154,10 @@ else:
             fig1 = px.pie(df_filtered, names="WaterStatus", title="Overall Water Status")
             st.plotly_chart(fig1, use_container_width=True)
 
-        # Device Type Aggregate Donuts
+        # Device Type Donuts
         st.subheader("📊 Device Type Distribution per Client")
         fixed_counts = df_filtered[df_filtered["DeviceType"]=="Fixed"].groupby("Client")["DeviceID"].nunique()
         portable_counts = df_filtered[df_filtered["DeviceType"]=="Portable"].groupby("Client")["DeviceID"].nunique()
-
         if not fixed_counts.empty:
             fig = px.pie(values=fixed_counts.values, names=fixed_counts.index, hole=0.4, title="Fixed Devices per Client")
             st.plotly_chart(fig, use_container_width=True)
@@ -161,7 +167,7 @@ else:
 
         # Water Level Trend (sample device)
         st.subheader("📉 Water Level Trend (Sample Device)")
-        if "DeviceID" in df_filtered.columns and not df_filtered.empty:
+        if "DeviceID" in df_filtered.columns:
             sample_device = df_filtered["DeviceID"].iloc[0]
             device_data = df_filtered[df_filtered["DeviceID"]==sample_device]
             if not device_data.empty and "Timestamp" in device_data.columns:
@@ -173,7 +179,6 @@ else:
         if {"Latitude","Longitude"}.issubset(df_filtered.columns):
             df_map = df_filtered.dropna(subset=["Latitude","Longitude"])
             if not df_map.empty:
-                # Center map on mean coordinates
                 center_lat = df_map["Latitude"].mean()
                 center_lon = df_map["Longitude"].mean()
                 fig_map = px.scatter_mapbox(
