@@ -45,16 +45,17 @@ def create_multi_client_pdf(df):
         elements.append(Spacer(1, 12))
 
         # Water status pie chart (Matplotlib)
-        status_counts = client_data["WaterStatus"].value_counts()
-        fig, ax = plt.subplots()
-        ax.pie(status_counts, labels=status_counts.index, autopct='%1.1f%%')
-        ax.set_title(f"Water Status Distribution - {client}")
-        tmpfile = BytesIO()
-        plt.savefig(tmpfile, format='png')
-        plt.close(fig)
-        tmpfile.seek(0)
-        elements.append(Image(tmpfile, width=300, height=200))
-        elements.append(Spacer(1, 24))
+        if "WaterStatus" in client_data.columns:
+            status_counts = client_data["WaterStatus"].value_counts()
+            fig, ax = plt.subplots()
+            ax.pie(status_counts, labels=status_counts.index, autopct='%1.1f%%')
+            ax.set_title(f"Water Status Distribution - {client}")
+            tmpfile = BytesIO()
+            plt.savefig(tmpfile, format='png')
+            plt.close(fig)
+            tmpfile.seek(0)
+            elements.append(Image(tmpfile, width=300, height=200))
+            elements.append(Spacer(1, 24))
 
         elements.append(PageBreak())
 
@@ -67,55 +68,66 @@ def create_multi_client_pdf(df):
 # -------------------------------------------------------
 st.set_page_config(page_title="IoT Paddy Field Dashboard", layout="wide")
 
+# Add logo if available
+try:
+    st.image("logo.png", width=150)
+except:
+    st.write("")
+
 st.title("🌾 IoT Paddy Field Monitoring Dashboard")
 
-# File uploader
-uploaded_file = st.file_uploader("Upload IoT Data (CSV)", type=["csv"])
-if uploaded_file:
-    df = pd.read_csv(uploaded_file)
+# Load data from repo CSV
+@st.cache_data
+def load_data():
+    return pd.read_csv("iot_water_data.csv")
 
-    # Sidebar filters
-    st.sidebar.header("Filters")
-    client_filter = st.sidebar.multiselect("Select Client(s)", options=df["Client"].unique(), default=df["Client"].unique())
-    state_filter = st.sidebar.multiselect("Select State(s)", options=df["State"].unique(), default=df["State"].unique())
+df = load_data()
 
-    # Apply filters
-    df_filtered = df[(df["Client"].isin(client_filter)) & (df["State"].isin(state_filter))]
+# Sidebar filters
+st.sidebar.header("Filters")
+client_filter = st.sidebar.multiselect("Select Client(s)", options=df["Client"].unique(), default=df["Client"].unique())
+state_filter = st.sidebar.multiselect("Select State(s)", options=df["State"].unique(), default=df["State"].unique())
 
-    # KPIs
-    st.subheader("📊 Key Metrics")
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Total Farmers", df_filtered["FarmerID"].nunique())
-    col2.metric("Fixed Devices", df_filtered[df_filtered["DeviceType"] == "Fixed"]["DeviceID"].nunique())
-    col3.metric("Portable Devices", df_filtered[df_filtered["DeviceType"] == "Portable"]["DeviceID"].nunique())
+# Apply filters
+df_filtered = df[(df["Client"].isin(client_filter)) & (df["State"].isin(state_filter))]
 
-    # Charts
-    st.subheader("📈 Water Status Distribution")
+# KPIs
+st.subheader("📊 Key Metrics")
+col1, col2, col3 = st.columns(3)
+col1.metric("Total Farmers", df_filtered["FarmerID"].nunique())
+col2.metric("Fixed Devices", df_filtered[df_filtered["DeviceType"] == "Fixed"]["DeviceID"].nunique())
+col3.metric("Portable Devices", df_filtered[df_filtered["DeviceType"] == "Portable"]["DeviceID"].nunique())
+
+# Charts
+st.subheader("📈 Water Status Distribution")
+if "WaterStatus" in df_filtered.columns:
     fig1 = px.pie(df_filtered, names="WaterStatus", title="Overall Water Status")
     st.plotly_chart(fig1, use_container_width=True)
 
-    st.subheader("📉 Water Level Trend (Sample Device)")
+st.subheader("📉 Water Level Trend (Sample Device)")
+if "DeviceID" in df_filtered.columns and not df_filtered.empty:
     sample_device = df_filtered["DeviceID"].iloc[0]
     device_data = df_filtered[df_filtered["DeviceID"] == sample_device]
-    fig2 = px.line(device_data, x="Timestamp", y="WaterLevel", title=f"Device {sample_device} - Water Level Trend")
-    st.plotly_chart(fig2, use_container_width=True)
+    if not device_data.empty and "Timestamp" in device_data.columns:
+        fig2 = px.line(device_data, x="Timestamp", y="WaterLevel", title=f"Device {sample_device} - Water Level Trend")
+        st.plotly_chart(fig2, use_container_width=True)
 
-    st.subheader("🗺️ Field Map")
-    if "Latitude" in df_filtered.columns and "Longitude" in df_filtered.columns:
-        fig3 = px.scatter_mapbox(
-            df_filtered, lat="Latitude", lon="Longitude",
-            color="WaterStatus", hover_name="FarmerName",
-            zoom=5, height=500
-        )
-        fig3.update_layout(mapbox_style="open-street-map")
-        st.plotly_chart(fig3, use_container_width=True)
-
-    # Download PDF
-    st.subheader("📥 Export Reports")
-    pdf_buffer = create_multi_client_pdf(df_filtered)
-    st.download_button(
-        label="Download Client-wise PDF Report",
-        data=pdf_buffer,
-        file_name="iot_client_report.pdf",
-        mime="application/pdf",
+st.subheader("🗺️ Field Map")
+if {"Latitude", "Longitude"}.issubset(df_filtered.columns):
+    fig3 = px.scatter_mapbox(
+        df_filtered, lat="Latitude", lon="Longitude",
+        color="WaterStatus", hover_name="FarmerName",
+        zoom=5, height=500
     )
+    fig3.update_layout(mapbox_style="open-street-map")
+    st.plotly_chart(fig3, use_container_width=True)
+
+# Download PDF
+st.subheader("📥 Export Reports")
+pdf_buffer = create_multi_client_pdf(df_filtered)
+st.download_button(
+    label="Download Client-wise PDF Report",
+    data=pdf_buffer,
+    file_name="iot_client_report.pdf",
+    mime="application/pdf",
+)
