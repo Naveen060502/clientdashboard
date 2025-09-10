@@ -14,7 +14,8 @@ import tempfile
 # -------------------
 @st.cache_data
 def load_data():
-    df = pd.read_csv("iot_water_data_1.csv")  # replace with your IoT data
+    df = pd.read_csv("iot_water_data_1.csv")  # your IoT data file
+    df["Timestamp"] = pd.to_datetime(df["Timestamp"], errors="coerce")
     return df
 
 data = load_data()
@@ -23,11 +24,14 @@ data = load_data()
 # Sidebar Filters
 # -------------------
 st.sidebar.header("Filters")
-state = st.sidebar.selectbox("Select State", options=["All"] + list(data["State"].unique()))
+client = st.sidebar.selectbox("Select Client", options=["All"] + sorted(data["Client"].unique()))
+state = st.sidebar.selectbox("Select State", options=["All"] + sorted(data["State"].unique()))
 device_type = st.sidebar.multiselect("Device Type", options=data["DeviceType"].unique(), default=data["DeviceType"].unique())
 
 # Apply filters
 df = data.copy()
+if client != "All":
+    df = df[df["Client"] == client]
 if state != "All":
     df = df[df["State"] == state]
 if device_type:
@@ -89,7 +93,7 @@ def create_multi_client_pdf(dataframe):
         # Device Insights
         if not client_df.empty:
             story.append(Paragraph("📊 Device Insights", header_style))
-            
+
             # Pie chart
             status_counts = client_df["WaterStatus"].value_counts().reset_index()
             status_counts.columns = ["Status", "Count"]
@@ -177,9 +181,7 @@ def create_multi_client_pdf(dataframe):
     # Trend chart across time (all devices combined)
     if "Timestamp" in dataframe.columns:
         df_trend = dataframe.copy()
-        df_trend["Timestamp"] = pd.to_datetime(df_trend["Timestamp"])
         df_trend["Date"] = df_trend["Timestamp"].dt.date
-
         trend_counts = df_trend.groupby(["Date", "WaterStatus"]).size().reset_index(name="Count")
 
         fig_trend = px.line(trend_counts, x="Date", y="Count", color="WaterStatus",
