@@ -139,7 +139,7 @@ else:
     if not district_filter:
         district_filter = df["District"].unique()
 
-    df_filtered = df[(df["Client"].isin(client_filter)) & (df["State"].isin(state_filter)) & (df["District"].isin(district_filter)]
+    df_filtered = df[(df["Client"].isin(client_filter)) & (df["State"].isin(state_filter)) & (df["District"].isin(district_filter))]
 
     if df_filtered.empty:
         st.warning("No data available for selected filters.")
