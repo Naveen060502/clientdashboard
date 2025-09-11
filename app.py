@@ -56,7 +56,7 @@ def create_multi_client_pdf(df):
     # Device Type Donuts side by side
     fixed_counts = df[df["DeviceType"]=="Fixed"].groupby("Client")["DeviceID"].nunique()
     portable_counts = df[df["DeviceType"]=="Portable"].groupby("Client")["DeviceID"].nunique()
-
+   
     if not fixed_counts.empty or not portable_counts.empty:
         imgs = []
         if not fixed_counts.empty:
@@ -130,7 +130,8 @@ else:
     st.sidebar.header("Filters")
     client_filter = st.sidebar.multiselect("Select Client(s)", options=df["Client"].unique(), default=[])
     state_filter = st.sidebar.multiselect("Select State(s)", options=df["State"].unique(), default=[])
-    district_filter = st.sidebar.multiselect("Select Districts(s)", options=df["District"].unique(), default=[])
+    district_filter = st.sidebar.multiselect("Select District(s)", options=df["District"].unique(), default=[])
+    village_filter = st.sidebar.multiselect("Select Village(s)", options=df["Village"].unique(), default=[])
     
     if not client_filter:
         client_filter = df["Client"].unique()
@@ -138,8 +139,10 @@ else:
         state_filter = df["State"].unique()
     if not district_filter:
         district_filter = df["District"].unique()
+    if not village_filter:
+        village_filter = df["Village").unique()
 
-    df_filtered = df[(df["Client"].isin(client_filter)) & (df["State"].isin(state_filter)) & (df["District"].isin(district_filter))]
+    df_filtered = df[(df["Client"].isin(client_filter)) & (df["State"].isin(state_filter)) & (df["District"].isin(district_filter)) & (df["Village"].isin(village_filter))]
 
     if df_filtered.empty:
         st.warning("No data available for selected filters.")
