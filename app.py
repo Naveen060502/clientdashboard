@@ -12,8 +12,8 @@ from reportlab.lib.styles import getSampleStyleSheet
 def fig_to_bytesio(fig):
     buf = BytesIO()
     fig.savefig(buf, format='png', bbox_inches='tight')
-    plt.close(fig)
     buf.seek(0)
+    plt.close(fig)
     return buf
 
 # ---------------------------
@@ -49,7 +49,8 @@ def create_multi_client_pdf(df):
         axes[1].pie(portable_counts, labels=portable_counts.index, autopct='%1.1f%%',
                     startangle=90, wedgeprops={'width': 0.4})
         axes[1].set_title("Portable Devices per Client")
-        elements.append(RLImage(fig_to_bytesio(fig), width=500, height=250))
+        donut_buf = fig_to_bytesio(fig)   # ✅ capture fig before closing
+        elements.append(RLImage(donut_buf, width=500, height=250))
         elements.append(Spacer(1, 20))
 
     # Client-wise Water Level Trend (one sample device per client)
@@ -67,8 +68,8 @@ def create_multi_client_pdf(df):
         fig = px.line(sample_trend, x="Timestamp", y="WaterLevel",
                       color="Client", line_group="DeviceID",
                       title="Client-wise Sample Device Water Level Trend")
-        fig.update_layout(template="plotly_white")
-        elements.append(RLImage(plotly_fig_to_bytesio(fig), width=500, height=250))
+        trend_buf = plotly_fig_to_bytesio(fig)
+        elements.append(RLImage(trend_buf, width=500, height=250))
         elements.append(Spacer(1, 20))
 
     doc.build(elements)
