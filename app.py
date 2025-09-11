@@ -46,7 +46,7 @@ def create_multi_client_pdf(df):
     daily_avg = df.groupby(["Date", "ClientName"])["WaterLevel"].mean().reset_index()
 
     if not daily_avg.empty:
-        fig = px.line(daily_avg, x="Date", y="WaterLevel", color="ClientName",
+        fig = px.line(daily_avg, x="Timestamp", y="WaterLevel", color="ClientName",
                       title="Client-wise Daily Average Water Level Trend")
         fig.update_layout(template="plotly_white")
         elements.append(RLImage(fig_to_bytesio(fig), width=500, height=250))
@@ -65,14 +65,14 @@ st.set_page_config(page_title="IoT Water Dashboard", layout="wide")
 df = pd.read_csv("iot_water_data_1.csv")
 
 # Ensure date is datetime
-df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+df["Timestamp"] = pd.to_datetime(df["Timestamp"], errors="coerce")
 
 # Sidebar Filters
 st.sidebar.header("🔍 Filters")
 client_filter = st.sidebar.multiselect("Select Client(s)", options=df["ClientName"].unique())
 district_filter = st.sidebar.multiselect("Select District(s)", options=df["District"].unique())
 village_filter = st.sidebar.multiselect("Select Village(s)", options=df["Village"].unique())
-date_range = st.sidebar.date_input("Select Date Range", [df["Date"].min(), df["Date"].max()])
+date_range = st.sidebar.date_input("Select Date Range", [df["Timestamp"].min(), df["Timestamp"].max()])
 
 # Apply filters
 df_filtered = df.copy()
@@ -84,8 +84,8 @@ if village_filter:
     df_filtered = df_filtered[df_filtered["Village"].isin(village_filter)]
 if len(date_range) == 2:
     start_date, end_date = date_range
-    df_filtered = df_filtered[(df_filtered["Date"] >= pd.to_datetime(start_date)) &
-                              (df_filtered["Date"] <= pd.to_datetime(end_date))]
+    df_filtered = df_filtered[(df_filtered["Timestamp"] >= pd.to_datetime(start_date)) &
+                              (df_filtered["Timestamp"] <= pd.to_datetime(end_date))]
 
 # ---------------------------
 # Dashboard Layout
@@ -111,9 +111,9 @@ with col2:
 
 # Water Level Trend: Client-wise Daily Average
 st.subheader("📈 Client-wise Daily Average Water Level Trend")
-daily_avg = df_filtered.groupby(["Date", "ClientName"])["WaterLevel"].mean().reset_index()
+daily_avg = df_filtered.groupby(["Timestamp", "ClientName"])["WaterLevel"].mean().reset_index()
 if not daily_avg.empty:
-    fig = px.line(daily_avg, x="Date", y="WaterLevel", color="ClientName",
+    fig = px.line(daily_avg, x="Timestamp", y="WaterLevel", color="ClientName",
                   title="Daily Average Water Level Trend")
     st.plotly_chart(fig, use_container_width=True)
 else:
