@@ -17,6 +17,15 @@ def fig_to_bytesio(fig):
     return buf
 
 # ---------------------------
+# Utility: Save plotly fig to BytesIO for ReportLab
+# ---------------------------
+def plotly_fig_to_bytesio(fig):
+    buf = BytesIO()
+    fig.write_image(buf, format="png")  # requires kaleido
+    buf.seek(0)
+    return buf
+
+# ---------------------------
 # PDF Export Function
 # ---------------------------
 def create_multi_client_pdf(df):
@@ -34,22 +43,32 @@ def create_multi_client_pdf(df):
 
     if not fixed_counts.empty and not portable_counts.empty:
         fig, axes = plt.subplots(1, 2, figsize=(8, 4))
-        axes[0].pie(fixed_counts, labels=fixed_counts.index, autopct='%1.1f%%', startangle=90, wedgeprops={'width':0.4})
+        axes[0].pie(fixed_counts, labels=fixed_counts.index, autopct='%1.1f%%',
+                    startangle=90, wedgeprops={'width': 0.4})
         axes[0].set_title("Fixed Devices per Client")
-        axes[1].pie(portable_counts, labels=portable_counts.index, autopct='%1.1f%%', startangle=90, wedgeprops={'width':0.4})
+        axes[1].pie(portable_counts, labels=portable_counts.index, autopct='%1.1f%%',
+                    startangle=90, wedgeprops={'width': 0.4})
         axes[1].set_title("Portable Devices per Client")
         elements.append(RLImage(fig_to_bytesio(fig), width=500, height=250))
         elements.append(Spacer(1, 20))
 
-    # Water Level Trend (Client-wise Daily Average)
+    # Client-wise Water Level Trend (one sample device per client)
     df["Timestamp"] = pd.to_datetime(df["Timestamp"])
-    daily_avg = df.groupby(["Timestamp", "Client"])["WaterLevel"].mean().reset_index()
+    sample_trend = pd.DataFrame()
 
-    if not daily_avg.empty:
-        fig = px.line(daily_avg, x="Timestamp", y="WaterLevel", color="Client",
-                      title="Client-wise Daily Average Water Level Trend")
+    for client in df["Client"].unique():
+        client_devices = df[df["Client"] == client]["DeviceID"].unique()
+        if len(client_devices) > 0:
+            sample_device = client_devices[0]  # pick first device
+            device_data = df[df["DeviceID"] == sample_device]
+            sample_trend = pd.concat([sample_trend, device_data])
+
+    if not sample_trend.empty:
+        fig = px.line(sample_trend, x="Timestamp", y="WaterLevel",
+                      color="Client", line_group="DeviceID",
+                      title="Client-wise Sample Device Water Level Trend")
         fig.update_layout(template="plotly_white")
-        elements.append(RLImage(fig_to_bytesio(fig), width=500, height=250))
+        elements.append(RLImage(plotly_fig_to_bytesio(fig), width=500, height=250))
         elements.append(Spacer(1, 20))
 
     doc.build(elements)
@@ -63,8 +82,6 @@ st.set_page_config(page_title="IoT Water Dashboard", layout="wide")
 
 # Load data
 df = pd.read_csv("iot_water_data_1.csv")
-
-# Ensure date is datetime
 df["Timestamp"] = pd.to_datetime(df["Timestamp"], errors="coerce")
 
 # Sidebar Filters
@@ -109,12 +126,21 @@ with col2:
                      title="Portable Devices per Client", hole=0.5)
         st.plotly_chart(fig, use_container_width=True)
 
-# Water Level Trend: Client-wise Daily Average
-st.subheader("📈 Client-wise Daily Average Water Level Trend")
-daily_avg = df_filtered.groupby(["Timestamp", "Client"])["WaterLevel"].mean().reset_index()
-if not daily_avg.empty:
-    fig = px.line(daily_avg, x="Timestamp", y="WaterLevel", color="Client",
-                  title="Daily Average Water Level Trend")
+# Client-wise Sample Device Water Level Trend
+st.subheader("📈 Client-wise Sample Device Water Level Trend")
+sample_trend = pd.DataFrame()
+
+for client in df_filtered["Client"].unique():
+    client_devices = df_filtered[df_filtered["Client"] == client]["DeviceID"].unique()
+    if len(client_devices) > 0:
+        sample_device = client_devices[0]  # pick first device
+        device_data = df_filtered[df_filtered["DeviceID"] == sample_device]
+        sample_trend = pd.concat([sample_trend, device_data])
+
+if not sample_trend.empty:
+    fig = px.line(sample_trend, x="Timestamp", y="WaterLevel",
+                  color="Client", line_group="DeviceID",
+                  title="Client-wise Sample Device Water Level Trend")
     st.plotly_chart(fig, use_container_width=True)
 else:
     st.info("No data available for selected filters.")
