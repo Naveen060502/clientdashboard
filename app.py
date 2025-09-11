@@ -46,7 +46,7 @@ def create_multi_client_pdf(df):
     daily_avg = df.groupby(["Timestamp", "Client"])["WaterLevel"].mean().reset_index()
 
     if not daily_avg.empty:
-        fig = px.line(daily_avg, x="Timestamp", y="WaterLevel", color="ClientName",
+        fig = px.line(daily_avg, x="Timestamp", y="WaterLevel", color="Client",
                       title="Client-wise Daily Average Water Level Trend")
         fig.update_layout(template="plotly_white")
         elements.append(RLImage(fig_to_bytesio(fig), width=500, height=250))
