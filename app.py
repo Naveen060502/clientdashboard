@@ -42,8 +42,8 @@ def create_multi_client_pdf(df):
         elements.append(Spacer(1, 20))
 
     # Water Level Trend (Client-wise Daily Average)
-    df["Date"] = pd.to_datetime(df["Date"])
-    daily_avg = df.groupby(["Date", "Client"])["WaterLevel"].mean().reset_index()
+    df["Timestamp"] = pd.to_datetime(df["Timestamp"])
+    daily_avg = df.groupby(["Timestamp", "Client"])["WaterLevel"].mean().reset_index()
 
     if not daily_avg.empty:
         fig = px.line(daily_avg, x="Timestamp", y="WaterLevel", color="ClientName",
