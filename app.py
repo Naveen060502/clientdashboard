@@ -107,7 +107,7 @@ st.title("🌾 IoT Paddy Field Monitoring Dashboard")
 # Load CSV
 @st.cache_data
 def load_data():
-    file_path = "iot_water_data_1.csv"
+    file_path = "iot_water_data_2.csv"
     if os.path.exists(file_path):
         df = pd.read_csv(file_path)
         if "Timestamp" in df.columns:
