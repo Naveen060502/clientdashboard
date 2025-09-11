@@ -140,7 +140,7 @@ else:
     if not district_filter:
         district_filter = df["District"].unique()
     if not village_filter:
-        village_filter = df["Village").unique()
+        village_filter = df["Village"].unique()
 
     df_filtered = df[(df["Client"].isin(client_filter)) & (df["State"].isin(state_filter)) & (df["District"].isin(district_filter)) & (df["Village"].isin(village_filter))]
 
