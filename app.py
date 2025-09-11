@@ -29,8 +29,8 @@ def create_multi_client_pdf(df):
     elements.append(Spacer(1, 20))
 
     # Donut charts (Fixed & Portable) side by side
-    fixed_counts = df[df['DeviceType'] == 'Fixed'].groupby('ClientName')['DeviceID'].nunique()
-    portable_counts = df[df['DeviceType'] == 'Portable'].groupby('ClientName')['DeviceID'].nunique()
+    fixed_counts = df[df['DeviceType'] == 'Fixed'].groupby('Client')['DeviceID'].nunique()
+    portable_counts = df[df['DeviceType'] == 'Portable'].groupby('Client')['DeviceID'].nunique()
 
     if not fixed_counts.empty and not portable_counts.empty:
         fig, axes = plt.subplots(1, 2, figsize=(8, 4))
@@ -43,7 +43,7 @@ def create_multi_client_pdf(df):
 
     # Water Level Trend (Client-wise Daily Average)
     df["Date"] = pd.to_datetime(df["Date"])
-    daily_avg = df.groupby(["Date", "ClientName"])["WaterLevel"].mean().reset_index()
+    daily_avg = df.groupby(["Date", "Client"])["WaterLevel"].mean().reset_index()
 
     if not daily_avg.empty:
         fig = px.line(daily_avg, x="Timestamp", y="WaterLevel", color="ClientName",
@@ -69,7 +69,7 @@ df["Timestamp"] = pd.to_datetime(df["Timestamp"], errors="coerce")
 
 # Sidebar Filters
 st.sidebar.header("🔍 Filters")
-client_filter = st.sidebar.multiselect("Select Client(s)", options=df["ClientName"].unique())
+client_filter = st.sidebar.multiselect("Select Client(s)", options=df["Client"].unique())
 district_filter = st.sidebar.multiselect("Select District(s)", options=df["District"].unique())
 village_filter = st.sidebar.multiselect("Select Village(s)", options=df["Village"].unique())
 date_range = st.sidebar.date_input("Select Date Range", [df["Timestamp"].min(), df["Timestamp"].max()])
@@ -77,7 +77,7 @@ date_range = st.sidebar.date_input("Select Date Range", [df["Timestamp"].min(), 
 # Apply filters
 df_filtered = df.copy()
 if client_filter:
-    df_filtered = df_filtered[df_filtered["ClientName"].isin(client_filter)]
+    df_filtered = df_filtered[df_filtered["Client"].isin(client_filter)]
 if district_filter:
     df_filtered = df_filtered[df_filtered["District"].isin(district_filter)]
 if village_filter:
@@ -96,14 +96,14 @@ st.title("💧 IoT Water Dashboard")
 col1, col2 = st.columns(2)
 
 with col1:
-    fixed_counts = df_filtered[df_filtered['DeviceType'] == 'Fixed'].groupby('ClientName')['DeviceID'].nunique()
+    fixed_counts = df_filtered[df_filtered['DeviceType'] == 'Fixed'].groupby('Client')['DeviceID'].nunique()
     if not fixed_counts.empty:
         fig = px.pie(fixed_counts, values=fixed_counts.values, names=fixed_counts.index,
                      title="Fixed Devices per Client", hole=0.5)
         st.plotly_chart(fig, use_container_width=True)
 
 with col2:
-    portable_counts = df_filtered[df_filtered['DeviceType'] == 'Portable'].groupby('ClientName')['DeviceID'].nunique()
+    portable_counts = df_filtered[df_filtered['DeviceType'] == 'Portable'].groupby('Client')['DeviceID'].nunique()
     if not portable_counts.empty:
         fig = px.pie(portable_counts, values=portable_counts.values, names=portable_counts.index,
                      title="Portable Devices per Client", hole=0.5)
@@ -111,9 +111,9 @@ with col2:
 
 # Water Level Trend: Client-wise Daily Average
 st.subheader("📈 Client-wise Daily Average Water Level Trend")
-daily_avg = df_filtered.groupby(["Timestamp", "ClientName"])["WaterLevel"].mean().reset_index()
+daily_avg = df_filtered.groupby(["Timestamp", "Client"])["WaterLevel"].mean().reset_index()
 if not daily_avg.empty:
-    fig = px.line(daily_avg, x="Timestamp", y="WaterLevel", color="ClientName",
+    fig = px.line(daily_avg, x="Timestamp", y="WaterLevel", color="Client",
                   title="Daily Average Water Level Trend")
     st.plotly_chart(fig, use_container_width=True)
 else:
