@@ -1,109 +1,93 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import matplotlib.pyplot as plt
-from io import BytesIO
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image as RLImage
-from reportlab.lib.styles import getSampleStyleSheet
 
 # ---------------------------
-# Utility: Save matplotlib fig to BytesIO for ReportLab
+# Dummy credentials
 # ---------------------------
-def fig_to_bytesio(fig):
-    buf = BytesIO()
-    fig.savefig(buf, format='png', bbox_inches='tight')
-    buf.seek(0)
-    plt.close(fig)
-    return buf
-
-# ---------------------------
-# Utility: Save plotly fig to BytesIO for ReportLab
-# ---------------------------
-def plotly_fig_to_bytesio(fig):
-    buf = BytesIO()
-    fig.write_image(buf, format="png")  # requires kaleido
-    buf.seek(0)
-    return buf
+USERS = {
+    "admin": {"password": "admin123", "role": "admin"},
+    "clientA": {"password": "client123", "role": "client", "client_name": "ClientA"},
+    "clientB": {"password": "client123", "role": "client", "client_name": "ClientB"},
+}
 
 # ---------------------------
-# PDF Export Function
+# Session state login check
 # ---------------------------
-def create_multi_client_pdf(df):
-    buf = BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=(800, 1000))
-    styles = getSampleStyleSheet()
-    elements = []
-
-    elements.append(Paragraph("📊 Multi-Client IoT Water Report", styles["Title"]))
-    elements.append(Spacer(1, 20))
-
-    # Donut charts (Fixed & Portable) side by side
-    fixed_counts = df[df['DeviceType'] == 'Fixed'].groupby('Client')['DeviceID'].nunique()
-    portable_counts = df[df['DeviceType'] == 'Portable'].groupby('Client')['DeviceID'].nunique()
-
-    if not fixed_counts.empty and not portable_counts.empty:
-        fig, axes = plt.subplots(1, 2, figsize=(8, 4))
-        axes[0].pie(fixed_counts, labels=fixed_counts.index, autopct='%1.1f%%',
-                    startangle=90, wedgeprops={'width': 0.4})
-        axes[0].set_title("Fixed Devices per Client")
-        axes[1].pie(portable_counts, labels=portable_counts.index, autopct='%1.1f%%',
-                    startangle=90, wedgeprops={'width': 0.4})
-        axes[1].set_title("Portable Devices per Client")
-        donut_buf = fig_to_bytesio(fig)   # ✅ capture fig before closing
-        elements.append(RLImage(donut_buf, width=500, height=250))
-        elements.append(Spacer(1, 20))
-
-    # Client-wise Water Level Trend (one sample device per client)
-    df["Timestamp"] = pd.to_datetime(df["Timestamp"])
-    sample_trend = pd.DataFrame()
-
-    for client in df["Client"].unique():
-        client_devices = df[df["Client"] == client]["DeviceID"].unique()
-        if len(client_devices) > 0:
-            sample_device = client_devices[0]  # pick first device
-            device_data = df[df["DeviceID"] == sample_device]
-            sample_trend = pd.concat([sample_trend, device_data])
-
-    if not sample_trend.empty:
-        fig = px.line(sample_trend, x="Timestamp", y="WaterLevel",
-                      color="Client", line_group="DeviceID",
-                      title="Client-wise Sample Device Water Level Trend")
-        trend_buf = plotly_fig_to_bytesio(fig)
-        elements.append(RLImage(trend_buf, width=500, height=250))
-        elements.append(Spacer(1, 20))
-
-    doc.build(elements)
-    buf.seek(0)
-    return buf
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+if "role" not in st.session_state:
+    st.session_state.role = None
+if "client_name" not in st.session_state:
+    st.session_state.client_name = None
 
 # ---------------------------
-# Streamlit App
+# Login form
+# ---------------------------
+if not st.session_state.logged_in:
+    st.title("🔐 IoT Water Dashboard Login")
+
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
+    if st.button("Login"):
+        user = USERS.get(username)
+        if user and user["password"] == password:
+            st.session_state.logged_in = True
+            st.session_state.role = user["role"]
+            if user["role"] == "client":
+                st.session_state.client_name = user["client_name"]
+            st.success("✅ Login successful")
+            st.rerun()
+        else:
+            st.error("❌ Invalid username or password")
+    st.stop()
+
+# ---------------------------
+# Dashboard after login
 # ---------------------------
 st.set_page_config(page_title="IoT Water Dashboard", layout="wide")
+st.sidebar.success(f"Logged in as {st.session_state.role.upper()}")
+
+# Logout
+if st.sidebar.button("Logout"):
+    st.session_state.logged_in = False
+    st.session_state.role = None
+    st.session_state.client_name = None
+    st.rerun()
 
 # Load data
 df = pd.read_csv("iot_water_data_1.csv")
 df["Timestamp"] = pd.to_datetime(df["Timestamp"], errors="coerce")
 
-# Sidebar Filters
-st.sidebar.header("🔍 Filters")
-client_filter = st.sidebar.multiselect("Select Client(s)", options=df["Client"].unique())
-district_filter = st.sidebar.multiselect("Select District(s)", options=df["District"].unique())
-village_filter = st.sidebar.multiselect("Select Village(s)", options=df["Village"].unique())
-date_range = st.sidebar.date_input("Select Date Range", [df["Timestamp"].min(), df["Timestamp"].max()])
+# ---------------------------
+# Role-based filtering
+# ---------------------------
+if st.session_state.role == "client":
+    df = df[df["Client"] == st.session_state.client_name]
 
-# Apply filters
-df_filtered = df.copy()
-if client_filter:
-    df_filtered = df_filtered[df_filtered["Client"].isin(client_filter)]
-if district_filter:
-    df_filtered = df_filtered[df_filtered["District"].isin(district_filter)]
-if village_filter:
-    df_filtered = df_filtered[df_filtered["Village"].isin(village_filter)]
-if len(date_range) == 2:
-    start_date, end_date = date_range
-    df_filtered = df_filtered[(df_filtered["Timestamp"] >= pd.to_datetime(start_date)) &
-                              (df_filtered["Timestamp"] <= pd.to_datetime(end_date))]
+# ---------------------------
+# Sidebar Filters (admin only)
+# ---------------------------
+if st.session_state.role == "admin":
+    st.sidebar.header("🔍 Filters")
+    client_filter = st.sidebar.multiselect("Select Client(s)", options=df["Client"].unique())
+    district_filter = st.sidebar.multiselect("Select District(s)", options=df["District"].unique())
+    village_filter = st.sidebar.multiselect("Select Village(s)", options=df["Village"].unique())
+    date_range = st.sidebar.date_input("Select Date Range", [df["Timestamp"].min(), df["Timestamp"].max()])
+
+    df_filtered = df.copy()
+    if client_filter:
+        df_filtered = df_filtered[df_filtered["Client"].isin(client_filter)]
+    if district_filter:
+        df_filtered = df_filtered[df_filtered["District"].isin(district_filter)]
+    if village_filter:
+        df_filtered = df_filtered[df_filtered["Village"].isin(village_filter)]
+    if len(date_range) == 2:
+        start_date, end_date = date_range
+        df_filtered = df_filtered[(df_filtered["Timestamp"] >= pd.to_datetime(start_date)) &
+                                  (df_filtered["Timestamp"] <= pd.to_datetime(end_date))]
+else:
+    df_filtered = df.copy()
 
 # ---------------------------
 # Dashboard Layout
@@ -127,14 +111,35 @@ with col2:
                      title="Portable Devices per Client", hole=0.5)
         st.plotly_chart(fig, use_container_width=True)
 
-# Client-wise Sample Device Water Level Trend
-st.subheader("📈 Client-wise Sample Device Water Level Trend")
-sample_trend = pd.DataFrame()
+# Bar chart: Devices by District
+st.subheader("🏙️ Devices per District")
+district_counts = df_filtered.groupby("District")["DeviceID"].nunique().reset_index()
+if not district_counts.empty:
+    fig = px.bar(district_counts, x="District", y="DeviceID", title="Device Count per District", text="DeviceID")
+    st.plotly_chart(fig, use_container_width=True)
 
+# Bar chart: Devices by Village
+st.subheader("🏘️ Devices per Village")
+village_counts = df_filtered.groupby("Village")["DeviceID"].nunique().reset_index()
+if not village_counts.empty:
+    fig = px.bar(village_counts, x="Village", y="DeviceID", title="Device Count per Village", text="DeviceID")
+    st.plotly_chart(fig, use_container_width=True)
+
+# Water Level Trend: Client-wise Daily Average
+st.subheader("📈 Client-wise Daily Average Water Level Trend")
+daily_avg = df_filtered.groupby(["Timestamp", "Client"])["WaterLevel"].mean().reset_index()
+if not daily_avg.empty:
+    fig = px.line(daily_avg, x="Timestamp", y="WaterLevel", color="Client",
+                  title="Daily Average Water Level Trend")
+    st.plotly_chart(fig, use_container_width=True)
+
+# Water Level Trend: One Sample Device per Client
+st.subheader("📊 Sample Device Water Level Trend (per Client)")
+sample_trend = pd.DataFrame()
 for client in df_filtered["Client"].unique():
     client_devices = df_filtered[df_filtered["Client"] == client]["DeviceID"].unique()
     if len(client_devices) > 0:
-        sample_device = client_devices[0]  # pick first device
+        sample_device = client_devices[0]
         device_data = df_filtered[df_filtered["DeviceID"] == sample_device]
         sample_trend = pd.concat([sample_trend, device_data])
 
@@ -143,17 +148,14 @@ if not sample_trend.empty:
                   color="Client", line_group="DeviceID",
                   title="Client-wise Sample Device Water Level Trend")
     st.plotly_chart(fig, use_container_width=True)
-else:
-    st.info("No data available for selected filters.")
 
-# ---------------------------
-# Export Section
-# ---------------------------
-st.subheader("📥 Export Reports")
-pdf_buffer = create_multi_client_pdf(df_filtered)
-st.download_button(
-    label="Download Client-wise PDF Report",
-    data=pdf_buffer,
-    file_name="client_report.pdf",
-    mime="application/pdf"
-)
+# Map: Device Locations
+st.subheader("🗺️ Device Map")
+if {"Latitude", "Longitude"}.issubset(df_filtered.columns):
+    fig = px.scatter_mapbox(df_filtered, lat="Latitude", lon="Longitude",
+                            color="Client", hover_name="DeviceID",
+                            zoom=5, height=500)
+    fig.update_layout(mapbox_style="open-street-map")
+    st.plotly_chart(fig, use_container_width=True)
+else:
+    st.info("No latitude/longitude data available for mapping.")
