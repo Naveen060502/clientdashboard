@@ -130,13 +130,16 @@ else:
     st.sidebar.header("Filters")
     client_filter = st.sidebar.multiselect("Select Client(s)", options=df["Client"].unique(), default=[])
     state_filter = st.sidebar.multiselect("Select State(s)", options=df["State"].unique(), default=[])
-
+    district_filter = st.sidebar.multiselect("Select Districts(s)", options=df["District"].unique(), default=[])
+    
     if not client_filter:
         client_filter = df["Client"].unique()
     if not state_filter:
         state_filter = df["State"].unique()
+    if not district_filter:
+        district_filter = df["District"].unique()
 
-    df_filtered = df[(df["Client"].isin(client_filter)) & (df["State"].isin(state_filter))]
+    df_filtered = df[(df["Client"].isin(client_filter)) & (df["State"].isin(state_filter)) & (df["District"].isin(district_filter)]
 
     if df_filtered.empty:
         st.warning("No data available for selected filters.")
