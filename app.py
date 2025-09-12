@@ -312,7 +312,7 @@ with tabs[0]:
             else:
                 st.info("Need 'Client' and 'DeviceID' columns.")
         else:
-            st.subheader("District-wise Device Count (Pie)")
+            st.subheader("District-wise Device Count")
             if {"District","DeviceID"}.issubset(working.columns) and working["DeviceID"].notna().any():
                 ddc = working.groupby("District")["DeviceID"].nunique().reset_index(name="DeviceCount")
                 ddc = ddc.sort_values("DeviceCount", ascending=False)
@@ -327,7 +327,7 @@ with tabs[0]:
 
     # === Status donut (no slider) ===
     with g2:
-        st.subheader("Status-wise Device Count (Donut)")
+        st.subheader("Status-wise Device Count")
         sc = derive_status_counts(working, hours=DEFAULT_STATUS_HOURS)
         if not sc.empty:
             fig = px.pie(sc, names="Status", values="DeviceCount", hole=0.45)
@@ -341,7 +341,7 @@ with tabs[0]:
     # === Always-on charts ===
     gg1, gg2 = st.columns([1,1])
     with gg1:
-        st.subheader("Client-wise Number of Data (Portable only)")
+        st.subheader("Client-wise Number of Data")
         if "DeviceType" in working.columns:
             portable = working[working["DeviceType"] == "Portable"]
             if not portable.empty:
@@ -356,7 +356,7 @@ with tabs[0]:
             st.info("Column 'DeviceType' missing.")
 
     with gg2:
-        st.subheader("Field Officer-wise Number of Data (Portable only)")
+        st.subheader("Field Officer-wise Number of Data")
         fo_col = pick_field_officer_column(working)
         if fo_col is None:
             st.info("Couldn't find a Field Officer column. Expected one of: FieldOfficer, FiledOfficer, FOName, etc.")
