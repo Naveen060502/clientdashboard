@@ -351,7 +351,7 @@ with tabs[0]:
     # === Always-on charts ===
     gg1, gg2 = st.columns([1,1])
     with gg1:
-        st.subheader("Client-wise Number of Data (Portable only)")
+        st.subheader("Client-wise Number of Data")
         if "DeviceType" in working.columns:
             portable = working[working["DeviceType"] == "Portable"]
             if not portable.empty:
@@ -366,7 +366,7 @@ with tabs[0]:
             st.info("Column 'DeviceType' missing.")
 
     with gg2:
-        st.subheader("Field Officer-wise Number of Data (Portable only)")
+        st.subheader("Field Officer-wise Number of Data")
         fo_col = pick_field_officer_column(working)
         if fo_col is None:
             st.info("Couldn't find a Field Officer column. Expected one of: FieldOfficer, FiledOfficer, FOName, etc.")
@@ -601,7 +601,7 @@ with tabs[3]:
 
 # ------------- Device Location Map -------------
 with tabs[4]:
-    st.markdown("## 🗺️ Device Location (Unique DeviceID)")
+    st.markdown("## 🗺️ Device Location")
     if {"DeviceID","Latitude","Longitude"}.issubset(working.columns):
         # last known location per device (non-null lat/lon)
         loc = working.dropna(subset=["Latitude","Longitude","DeviceID"]).copy()
