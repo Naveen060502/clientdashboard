@@ -20,6 +20,7 @@ st.set_page_config(
 
 FAST_LIMIT_ROWS = 300_000   # switch to fast-mode aggregations above this
 DEFAULT_STATUS_HOURS = 24   # last seen within this window => Online
+SEASON_LABEL = "Kharif - 2025"
 
 # =====================================
 # -------------- Styling --------------
@@ -27,17 +28,18 @@ DEFAULT_STATUS_HOURS = 24   # last seen within this window => Online
 st.markdown(
     """
     <style>
-      .small-note {font-size: 0.9rem; color: #6b7280;}
-      .metric-row {display: flex; gap: 1rem; flex-wrap: wrap;}
-      .metric-card {
-          flex: 1 1 220px;
-          padding: 1rem;
+      .tiles-row {display: grid; grid-template-columns: repeat(4, minmax(180px, 1fr)); gap: 1rem;}
+      .tile {
+          padding: 1rem 1.2rem;
           border: 1px solid #e5e7eb;
-          border-radius: 12px;
+          border-radius: 14px;
           background: #ffffff;
           box-shadow: 0 1px 2px rgba(0,0,0,0.05);
       }
-      .st-emotion-cache-1jicfl2 {padding-top: 1rem;}
+      .tile h4 {margin: 0 0 6px 0; font-weight: 600; color: #111827;}
+      .tile h2 {margin: 0; font-size: 1.6rem;}
+      @media (max-width: 900px) {.tiles-row {grid-template-columns: repeat(2, 1fr);}}
+      @media (max-width: 600px) {.tiles-row {grid-template-columns: 1fr;}}
     </style>
     """,
     unsafe_allow_html=True,
@@ -149,13 +151,11 @@ def load_data(csv_path: str = "iot_water_data_1.csv") -> pd.DataFrame:
 df = load_data()
 
 def ist(dt_series: pd.Series) -> pd.Series:
-    # dt_series is expected tz-aware; if not, localize to IST
     try:
         if dt_series.dt.tz is None:
             return dt_series.dt.tz_localize("Asia/Kolkata")
         return dt_series.dt.tz_convert("Asia/Kolkata")
     except Exception:
-        # as a last resort, coerce then localize
         s = pd.to_datetime(dt_series, errors="coerce")
         return s.dt.tz_localize("Asia/Kolkata")
 
@@ -233,27 +233,31 @@ if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
 # =====================================
 # ---------- Helper functions ---------
 # =====================================
-def kpi_block(frame: pd.DataFrame):
-    farmers = frame["FarmerName"].nunique() if "FarmerName" in frame.columns else 0
+def kpi_block_simple(frame: pd.DataFrame):
+    farmers = 0
+    if "FarmerID" in frame.columns:
+        farmers = frame["FarmerID"].nunique()
+    elif "FarmerName" in frame.columns:
+        farmers = frame["FarmerName"].nunique()
     devices = frame["DeviceID"].nunique() if "DeviceID" in frame.columns else 0
     readings = len(frame)
-    last_seen = pd.to_datetime(frame["Timestamp"]).max()
-    last_seen_str = "—" if pd.isna(last_seen) else ist(pd.Series([last_seen])).iloc[0].strftime("%d %b %Y, %H:%M IST")
 
-    wl_notnull = frame["WaterLevel"].notna().mean() * 100 if "WaterLevel" in frame.columns and len(frame) else 0.0
-    fixed_count = frame.query("DeviceType == 'Fixed'").DeviceID.nunique() if "DeviceType" in frame.columns else 0
-    portable_count = frame.query("DeviceType == 'Portable'").DeviceID.nunique() if "DeviceType" in frame.columns else 0
-
-    st.markdown('<div class="metric-row">', unsafe_allow_html=True)
-    st.markdown(f'<div class="metric-card"><h4>👨‍🌾 Farmers</h4><h2>{farmers:,}</h2></div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="metric-card"><h4>💧 Devices</h4><h2>{devices:,}</h2><div class="small-note">Fixed: {fixed_count} • Portable: {portable_count}</div></div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="metric-card"><h4>📊 Readings</h4><h2>{readings:,}</h2></div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="metric-card"><h4>✅ Data Completeness</h4><h2>{wl_notnull:.1f}%</h2><div class="small-note">non-null WaterLevel</div></div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="metric-card"><h4>⏱️ Last Ingest</h4><h2 style="font-size:1.2rem">{last_seen_str}</h2></div>', unsafe_allow_html=True)
+    st.markdown('<div class="tiles-row">', unsafe_allow_html=True)
+    st.markdown(f'<div class="tile"><h4>👨‍🌾 Total Farmers</h4><h2>{int(farmers):,}</h2></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="tile"><h4>💧 Total Devices</h4><h2>{int(devices):,}</h2></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="tile"><h4>📊 Total Readings</h4><h2>{int(readings):,}</h2></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="tile"><h4>🌾 Season</h4><h2>{SEASON_LABEL}</h2></div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
 def pick_field_officer_column(frame: pd.DataFrame) -> str | None:
     candidates = ["FieldOfficer","Field Officer","Field_Officer","FOName","Officer","FiledOfficer","FiledOfficer.Name"]
+    for c in candidates:
+        if c in frame.columns:
+            return c
+    return None
+
+def pick_village_column(frame: pd.DataFrame) -> str | None:
+    candidates = ["Village","VillageName","village","Village_Name"]
     for c in candidates:
         if c in frame.columns:
             return c
@@ -287,29 +291,44 @@ tabs = st.tabs(["📊 Dashboard", "📈 Trends", "📟 Device-wise Irrigation Tr
 # ---------------- Dashboard ------------
 with tabs[0]:
     st.markdown("## 🌊 IoT Water Dashboard")
-    kpi_block(working)
+    kpi_block_simple(working)
 
     st.markdown("---")
-    # === Requested charts ===
     g1, g2 = st.columns([1,1])
-    with g1:
-        st.subheader("Client-wise Device Count (Pie)")
-        if {"Client","DeviceID"}.issubset(working.columns) and working["DeviceID"].notna().any():
-            cdc = working.groupby("Client")["DeviceID"].nunique().reset_index(name="DeviceCount")
-            cdc = cdc.sort_values("DeviceCount", ascending=False)
-            if not cdc.empty:
-                fig = px.pie(cdc, names="Client", values="DeviceCount", hole=0.0)
-                fig.update_traces(textposition="inside", textinfo="percent+label")
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.info("No devices in selection.")
-        else:
-            st.info("Need 'Client' and 'DeviceID' columns.")
 
+    # === First chart conditional by role ===
+    with g1:
+        if st.session_state.role == "admin":
+            st.subheader("Client-wise Device Count (Pie)")
+            if {"Client","DeviceID"}.issubset(working.columns) and working["DeviceID"].notna().any():
+                cdc = working.groupby("Client")["DeviceID"].nunique().reset_index(name="DeviceCount")
+                cdc = cdc.sort_values("DeviceCount", ascending=False)
+                if not cdc.empty:
+                    fig = px.pie(cdc, names="Client", values="DeviceCount")
+                    fig.update_traces(textposition="inside", textinfo="percent+label")
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("No devices in selection.")
+            else:
+                st.info("Need 'Client' and 'DeviceID' columns.")
+        else:
+            st.subheader("District-wise Device Count (Pie)")
+            if {"District","DeviceID"}.issubset(working.columns) and working["DeviceID"].notna().any():
+                ddc = working.groupby("District")["DeviceID"].nunique().reset_index(name="DeviceCount")
+                ddc = ddc.sort_values("DeviceCount", ascending=False)
+                if not ddc.empty:
+                    fig = px.pie(ddc, names="District", values="DeviceCount")
+                    fig.update_traces(textposition="inside", textinfo="percent+label")
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("No devices in selection.")
+            else:
+                st.info("Need 'District' and 'DeviceID' columns.")
+
+    # === Status donut (no slider) ===
     with g2:
         st.subheader("Status-wise Device Count (Donut)")
-        hrs = st.slider("Status threshold (hours)", 1, 72, DEFAULT_STATUS_HOURS, help="Last seen within N hours ⇒ Online")
-        sc = derive_status_counts(working, hours=hrs)
+        sc = derive_status_counts(working, hours=DEFAULT_STATUS_HOURS)
         if not sc.empty:
             fig = px.pie(sc, names="Status", values="DeviceCount", hole=0.45)
             fig.update_traces(textposition="inside", textinfo="percent+label")
@@ -318,6 +337,8 @@ with tabs[0]:
             st.info("No status data.")
 
     st.markdown("---")
+
+    # === Always-on charts ===
     gg1, gg2 = st.columns([1,1])
     with gg1:
         st.subheader("Client-wise Number of Data (Portable only)")
@@ -350,6 +371,74 @@ with tabs[0]:
             else:
                 st.info("No Portable device rows for Field Officer chart.")
 
+    # === Extra charts only for CLIENT role ===
+    if st.session_state.role == "client":
+        st.markdown("---")
+        st.markdown("### 👥 Farmers & Devices by Geography")
+
+        # District-wise farmer count
+        if "District" in working.columns:
+            st.subheader("District-wise Farmer Count")
+            farmer_col = "FarmerID" if "FarmerID" in working.columns else ("FarmerName" if "FarmerName" in working.columns else None)
+            if farmer_col:
+                dff = (working.dropna(subset=["District"])
+                             .groupby("District")[farmer_col].nunique()
+                             .reset_index(name="Farmers"))
+                if not dff.empty:
+                    fig = px.bar(dff.sort_values("Farmers", ascending=False), x="District", y="Farmers", text="Farmers")
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("No district data.")
+            else:
+                st.info("Farmer column not found.")
+        else:
+            st.info("District column not found.")
+
+        # Village-wise farmer count
+        vcol = pick_village_column(working)
+        if vcol:
+            st.subheader("Village-wise Farmer Count")
+            farmer_col = "FarmerID" if "FarmerID" in working.columns else ("FarmerName" if "FarmerName" in working.columns else None)
+            if farmer_col:
+                vff = (working.dropna(subset=[vcol])
+                             .groupby(vcol)[farmer_col].nunique()
+                             .reset_index(name="Farmers"))
+                if not vff.empty:
+                    fig = px.bar(vff.sort_values("Farmers", ascending=False).head(40), x=vcol, y="Farmers", text="Farmers")
+                    fig.update_layout(xaxis_title="Village")
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("No village data for farmer counts.")
+            else:
+                st.info("Farmer column not found.")
+        else:
+            st.info("Village column not found.")
+
+        # Village-wise device count
+        if vcol and "DeviceID" in working.columns:
+            st.subheader("Village-wise Device Count")
+            vdc = (working.dropna(subset=[vcol])
+                         .groupby(vcol)["DeviceID"].nunique()
+                         .reset_index(name="Devices"))
+            if not vdc.empty:
+                fig = px.bar(vdc.sort_values("Devices", ascending=False).head(40), x=vcol, y="Devices", text="Devices")
+                fig.update_layout(xaxis_title="Village")
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("No village device data.")
+
+        # WaterStatus radial bar (polar)
+        if "WaterStatus" in working.columns:
+            st.subheader("WaterStatus-wise Radial Bar")
+            ws = working.groupby("WaterStatus").size().reset_index(name="Count")
+            if not ws.empty:
+                fig = px.bar_polar(ws, r="Count", theta="WaterStatus")
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("No WaterStatus values.")
+        else:
+            st.info("WaterStatus column not found.")
+
     st.markdown("---")
     # Compact extras
     c1, c2 = st.columns([1,1])
@@ -381,7 +470,6 @@ with tabs[0]:
 with tabs[1]:
     st.markdown("## 📈 Time-Series & Heatmaps")
     agg_pick = st.selectbox("Aggregation", ["mean","sum","max","min"], index=0)
-    # Daily aggregation for speed
     tmp = working[["Timestamp","WaterLevel"]].copy()
     tmp = tmp.dropna(subset=["Timestamp"])
     if tmp.empty:
@@ -405,7 +493,6 @@ with tabs[1]:
         tmp2["Hour"] = ist_ts.dt.hour
         tmp2["DayOfWeek"] = ist_ts.dt.day_name()
         heat = tmp2.groupby(["DayOfWeek","Hour"])["WaterLevel"].mean().reset_index()
-        # ensure day ordering
         dow = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
         heat["DayOfWeek"] = pd.Categorical(heat["DayOfWeek"], categories=dow, ordered=True)
         heat = heat.sort_values(["DayOfWeek","Hour"])
@@ -417,11 +504,18 @@ with tabs[1]:
 # ------------- Device-wise Irrigation Trend -------------
 with tabs[2]:
     st.markdown("## 📟 Device-wise Irrigation Trend")
-    # Choose single device (to keep fast). If none selected, show top by readings.
-    dev_opts = sorted([str(x) for x in working["DeviceID"].dropna().unique().tolist()]) if "DeviceID" in working.columns else []
+
+    # Farmer filter
+    farmer_opts_all = sorted([str(x) for x in working["FarmerName"].dropna().unique().tolist()]) if "FarmerName" in working.columns else []
+    farmer_pick = st.selectbox("Filter by Farmer", options=["All"] + farmer_opts_all) if farmer_opts_all else "All"
+    w = working.copy()
+    if farmer_pick != "All" and "FarmerName" in w.columns:
+        w = w[w["FarmerName"].astype(str) == farmer_pick]
+
+    # Device selector depends on farmer filter
+    dev_opts = sorted([str(x) for x in w["DeviceID"].dropna().unique().tolist()]) if "DeviceID" in w.columns else []
     selected_dev = st.selectbox("Select Device", options=["Auto (top by readings)"] + dev_opts) if dev_opts else "Auto (top by readings)"
 
-    w = working.copy()
     if "DeviceID" in w.columns and w["DeviceID"].notna().any():
         if selected_dev == "Auto (top by readings)":
             counts = w.groupby("DeviceID").size().reset_index(name="Readings").sort_values("Readings", ascending=False)
@@ -439,14 +533,14 @@ with tabs[2]:
             sub["Timestamp"] = pd.to_datetime(sub["Timestamp"])
             sub = sub.dropna(subset=["Timestamp"])
 
-            # Compute dtype safely for categorical
             if "DeviceType" in sub.columns:
                 vals = sub["DeviceType"].dropna()
                 dtype = str(vals.iloc[0]) if len(vals) > 0 else "Unknown"
             else:
                 dtype = "Unknown"
 
-            st.markdown(f"**Device {dev_id}** — Type: {dtype}")
+            label_farmer = sub['FarmerName'].dropna().iloc[0] if 'FarmerName' in sub.columns and not sub['FarmerName'].dropna().empty else "—"
+            st.markdown(f"**Device {dev_id}** — Type: {dtype} — Farmer: {label_farmer}")
 
             if dtype == "Fixed":
                 fig = px.line(sub.sort_values("Timestamp"), x="Timestamp", y="WaterLevel", markers=True, title=f"Irrigation Trend — Fixed ({dev_id})")
@@ -454,7 +548,6 @@ with tabs[2]:
                 fig = px.scatter(sub.sort_values("Timestamp"), x="Timestamp", y="WaterLevel", title=f"Irrigation Trend — Portable/Other ({dev_id})", trendline="lowess")
             st.plotly_chart(fig, use_container_width=True)
 
-            # Optional: day-wise aggregation for quick summary
             sub["Date"] = ist(sub["Timestamp"]).dt.date
             daily = sub.groupby("Date", as_index=False)["WaterLevel"].mean()
             st.dataframe(daily.rename(columns={"WaterLevel":"Avg WaterLevel"}), use_container_width=True, height=260)
@@ -480,7 +573,6 @@ with tabs[3]:
     with c2:
         st.subheader("Out-of-Range Flags")
         if "WaterLevel" in working.columns:
-            # sensible defaults from quantiles (guarded)
             q01 = float(np.nanquantile(working["WaterLevel"].dropna(), 0.01)) if working["WaterLevel"].notna().sum() else 0.0
             q99 = float(np.nanquantile(working["WaterLevel"].dropna(), 0.99)) if working["WaterLevel"].notna().sum() else 100.0
             low = st.number_input("Min allowed WaterLevel", value=q01)
@@ -512,15 +604,12 @@ with tabs[4]:
             changes = st.text_area("List the changes required (required)")
 
         if st.button("Submit", type="primary"):
-            # Validate required fields
             if status == "Approved":
-                pass  # satisfaction always set by slider
+                pass
             elif status == "Not Approved" and not reason.strip():
-                st.warning("Please provide a reason for rejection.")
-                st.stop()
+                st.warning("Please provide a reason for rejection."); st.stop()
             elif status == "Changes Required" and not changes.strip():
-                st.warning("Please list the required changes.")
-                st.stop()
+                st.warning("Please list the required changes."); st.stop()
 
             row = {
                 "Timestamp": datetime.now(timezone.utc).isoformat(),
@@ -530,6 +619,7 @@ with tabs[4]:
                 "Reason": reason.strip(),
                 "Changes": changes.strip(),
                 "Comment": comment.strip(),
+                "AdminComment": "",  # placeholder for admin
             }
             new_df = pd.DataFrame([row])
             if os.path.exists(FEEDBACK_FILE):
@@ -547,11 +637,32 @@ with tabs[4]:
         st.markdown("## 💬 Client Feedbacks")
         if os.path.exists(FEEDBACK_FILE):
             fb = pd.read_csv(FEEDBACK_FILE)
+            if "AdminComment" not in fb.columns:
+                fb["AdminComment"] = ""
             if fb.empty:
                 st.info("No feedback submitted yet.")
             else:
                 st.subheader("📋 Latest Feedback")
                 st.dataframe(fb.sort_values("Timestamp", ascending=False), use_container_width=True, height=320)
+
+                st.markdown("### ✍️ Add/Update Admin Comment")
+                fb_disp = fb.copy()
+                fb_disp["_id"] = fb_disp.index
+                options = fb_disp.apply(lambda r: f"[{r['_id']}] {r.get('Timestamp','')} • {r.get('Client','')} • {r.get('Status','')}", axis=1).tolist()
+                if options:
+                    pick = st.selectbox("Choose a feedback entry", options=options)
+                    try:
+                        sel_id = int(pick.split(']')[0][1:])
+                    except Exception:
+                        sel_id = None
+                    admin_note = st.text_area("Admin comment", value=str(fb.loc[sel_id, "AdminComment"]) if sel_id is not None else "")
+                    if st.button("Save Admin Comment"):
+                        if sel_id is not None:
+                            fb.loc[sel_id, "AdminComment"] = admin_note.strip()
+                            fb.to_csv(FEEDBACK_FILE, index=False)
+                            st.success("💾 Saved admin comment.")
+                        else:
+                            st.warning("Please select a valid entry.")
 
                 st.markdown("---")
                 cols = st.columns(3)
