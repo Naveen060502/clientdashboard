@@ -309,7 +309,7 @@ with tabs[0]:
     # === First chart conditional by role ===
     with g1:
         if st.session_state.role == "admin":
-            st.subheader("Client-wise Device Count (Pie)")
+            st.subheader("Client-wise Device Count")
             if {"Client","DeviceID"}.issubset(working.columns) and working["DeviceID"].notna().any():
                 cdc = working.groupby("Client")["DeviceID"].nunique().reset_index(name="DeviceCount")
                 cdc = cdc.sort_values("DeviceCount", ascending=False)
@@ -322,7 +322,7 @@ with tabs[0]:
             else:
                 st.info("Need 'Client' and 'DeviceID' columns.")
         else:
-            st.subheader("District-wise Device Count (Pie)")
+            st.subheader("District-wise Device Count")
             if {"District","DeviceID"}.issubset(working.columns) and working["DeviceID"].notna().any():
                 ddc = working.groupby("District")["DeviceID"].nunique().reset_index(name="DeviceCount")
                 ddc = ddc.sort_values("DeviceCount", ascending=False)
@@ -337,7 +337,7 @@ with tabs[0]:
 
     # === Status donut (no slider) ===
     with g2:
-        st.subheader("Status-wise Device Count (Donut)")
+        st.subheader("Status-wise Device Count")
         sc = derive_status_counts(working, hours=DEFAULT_STATUS_HOURS)
         if not sc.empty:
             fig = px.pie(sc, names="Status", values="DeviceCount", hole=0.45)
