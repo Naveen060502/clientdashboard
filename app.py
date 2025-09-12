@@ -28,18 +28,18 @@ SEASON_LABEL = "Kharif - 2025"
 st.markdown(
     """
     <style>
-      .tiles-row {display: grid; grid-template-columns: repeat(4, minmax(180px, 1fr)); gap: 1rem;}
-      .tile {
-          padding: 1rem 1.2rem;
+      .tile-one {
+          padding: 0.9rem 1.2rem;
           border: 1px solid #e5e7eb;
           border-radius: 14px;
           background: #ffffff;
           box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+          display: flex; align-items: center; gap: 2rem; flex-wrap: wrap;
       }
-      .tile h4 {margin: 0 0 6px 0; font-weight: 600; color: #111827;}
-      .tile h2 {margin: 0; font-size: 1.6rem;}
-      @media (max-width: 900px) {.tiles-row {grid-template-columns: repeat(2, 1fr);}}
-      @media (max-width: 600px) {.tiles-row {grid-template-columns: 1fr;}}
+      .kpi-chunk {display:flex; align-items:center; gap:0.5rem; font-size:1rem; color:#111827;}
+      .kpi-value {font-weight:700; font-size:1.4rem; margin-left:0.25rem;}
+      .divider {height: 26px; width:1px; background:#e5e7eb;}
+      .small-note {font-size: 0.9rem; color: #6b7280;}
     </style>
     """,
     unsafe_allow_html=True,
@@ -126,10 +126,8 @@ def load_data(csv_path: str = "iot_water_data_1.csv") -> pd.DataFrame:
         df["Timestamp"] = pd.NaT
 
     # Standardize important columns
-    default_cols = {
-        "Client": np.nan, "District": np.nan, "DeviceID": np.nan,
-        "DeviceType": np.nan, "FarmerName": np.nan, "WaterLevel": np.nan
-    }
+    default_cols = {"Client": np.nan, "District": np.nan, "DeviceID": np.nan,
+                    "DeviceType": np.nan, "FarmerName": np.nan, "WaterLevel": np.nan}
     for c, val in default_cols.items():
         if c not in df.columns:
             df[c] = val
@@ -186,7 +184,10 @@ date_range = st.sidebar.date_input(
     max_value=max_ts.date()
 )
 
+# Base working set; client login should only see their client
 working = df.copy()
+if st.session_state.role == "client":
+    working = working[working["Client"] == client_name]
 
 if st.session_state.role == "admin":
     client_opts = sorted([c for c in working["Client"].dropna().unique().tolist()])
@@ -204,7 +205,6 @@ if st.session_state.role == "admin":
     if dtype_sel:
         working = working[working["DeviceType"].isin(dtype_sel)]
 else:
-    working = working[working["Client"] == client_name]
     district_opts = sorted([c for c in working["District"].dropna().unique().tolist()])
     dtype_opts = sorted([c for c in working["DeviceType"].dropna().unique().tolist()])
     farmer_opts = sorted([c for c in working["FarmerName"].dropna().unique().tolist()])
@@ -222,7 +222,7 @@ else:
     if device_sel:
         working = working[working["DeviceID"].isin(device_sel)]
 
-# Date filter
+# Date filter (IST → UTC)
 if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
     start, end = date_range
     start_utc = pd.Timestamp(start).tz_localize("Asia/Kolkata").tz_convert("UTC")
@@ -233,7 +233,7 @@ if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
 # =====================================
 # ---------- Helper functions ---------
 # =====================================
-def kpi_block_simple(frame: pd.DataFrame):
+def kpi_one_row_tile(frame: pd.DataFrame):
     farmers = 0
     if "FarmerID" in frame.columns:
         farmers = frame["FarmerID"].nunique()
@@ -242,11 +242,14 @@ def kpi_block_simple(frame: pd.DataFrame):
     devices = frame["DeviceID"].nunique() if "DeviceID" in frame.columns else 0
     readings = len(frame)
 
-    st.markdown('<div class="tiles-row">', unsafe_allow_html=True)
-    st.markdown(f'<div class="tile"><h4>👨‍🌾 Total Farmers</h4><h2>{int(farmers):,}</h2></div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="tile"><h4>💧 Total Devices</h4><h2>{int(devices):,}</h2></div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="tile"><h4>📊 Total Readings</h4><h2>{int(readings):,}</h2></div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="tile"><h4>🌾 Season</h4><h2>{SEASON_LABEL}</h2></div>', unsafe_allow_html=True)
+    st.markdown('<div class="tile-one">', unsafe_allow_html=True)
+    st.markdown(f'<div class="kpi-chunk">👨‍🌾 <span>Total Farmers</span><span class="kpi-value">{int(farmers):,}</span></div>', unsafe_allow_html=True)
+    st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="kpi-chunk">💧 <span>Total Devices</span><span class="kpi-value">{int(devices):,}</span></div>', unsafe_allow_html=True)
+    st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="kpi-chunk">📊 <span>Total Readings</span><span class="kpi-value">{int(readings):,}</span></div>', unsafe_allow_html=True)
+    st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="kpi-chunk">🌾 <span>Season</span><span class="kpi-value">{SEASON_LABEL}</span></div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
 def pick_field_officer_column(frame: pd.DataFrame) -> str | None:
@@ -286,12 +289,19 @@ def derive_status_counts(frame: pd.DataFrame, hours:int=DEFAULT_STATUS_HOURS) ->
 # =====================================
 # ---------------- UI -----------------
 # =====================================
-tabs = st.tabs(["📊 Dashboard", "📈 Trends", "📟 Device-wise Irrigation Trend", "🧪 Data Quality", "💬 Feedback"])
+tabs = st.tabs([
+    "📊 Dashboard",
+    "📈 Trends",
+    "📟 Device-wise Irrigation Trend",
+    "🧪 Data Quality",
+    "🗺️ Device Location",
+    "💬 Feedback"
+])
 
 # ---------------- Dashboard ------------
 with tabs[0]:
     st.markdown("## 🌊 IoT Water Dashboard")
-    kpi_block_simple(working)
+    kpi_one_row_tile(working)
 
     st.markdown("---")
     g1, g2 = st.columns([1,1])
@@ -312,7 +322,7 @@ with tabs[0]:
             else:
                 st.info("Need 'Client' and 'DeviceID' columns.")
         else:
-            st.subheader("District-wise Device Count")
+            st.subheader("District-wise Device Count (Pie)")
             if {"District","DeviceID"}.issubset(working.columns) and working["DeviceID"].notna().any():
                 ddc = working.groupby("District")["DeviceID"].nunique().reset_index(name="DeviceCount")
                 ddc = ddc.sort_values("DeviceCount", ascending=False)
@@ -327,7 +337,7 @@ with tabs[0]:
 
     # === Status donut (no slider) ===
     with g2:
-        st.subheader("Status-wise Device Count")
+        st.subheader("Status-wise Device Count (Donut)")
         sc = derive_status_counts(working, hours=DEFAULT_STATUS_HOURS)
         if not sc.empty:
             fig = px.pie(sc, names="Status", values="DeviceCount", hole=0.45)
@@ -341,7 +351,7 @@ with tabs[0]:
     # === Always-on charts ===
     gg1, gg2 = st.columns([1,1])
     with gg1:
-        st.subheader("Client-wise Number of Data")
+        st.subheader("Client-wise Number of Data (Portable only)")
         if "DeviceType" in working.columns:
             portable = working[working["DeviceType"] == "Portable"]
             if not portable.empty:
@@ -356,7 +366,7 @@ with tabs[0]:
             st.info("Column 'DeviceType' missing.")
 
     with gg2:
-        st.subheader("Field Officer-wise Number of Data")
+        st.subheader("Field Officer-wise Number of Data (Portable only)")
         fo_col = pick_field_officer_column(working)
         if fo_col is None:
             st.info("Couldn't find a Field Officer column. Expected one of: FieldOfficer, FiledOfficer, FOName, etc.")
@@ -427,17 +437,18 @@ with tabs[0]:
             else:
                 st.info("No village device data.")
 
-        # WaterStatus radial bar (polar)
-        if "WaterStatus" in working.columns:
-            st.subheader("WaterStatus-wise Radial Bar")
-            ws = working.groupby("WaterStatus").size().reset_index(name="Count")
-            if not ws.empty:
-                fig = px.bar_polar(ws, r="Count", theta="WaterStatus")
+        # WaterStatus BOX chart
+        if "WaterStatus" in working.columns and "WaterLevel" in working.columns and working["WaterLevel"].notna().any():
+            st.subheader("WaterStatus-wise Box Plot (WaterLevel)")
+            wsdf = working.dropna(subset=["WaterStatus","WaterLevel"])
+            if not wsdf.empty:
+                fig = px.box(wsdf, x="WaterStatus", y="WaterLevel", points="outliers")
                 st.plotly_chart(fig, use_container_width=True)
             else:
-                st.info("No WaterStatus values.")
-        else:
-            st.info("WaterStatus column not found.")
+                st.info("No WaterStatus & WaterLevel data to plot.")
+        elif "WaterStatus" in working.columns:
+            st.subheader("WaterStatus-wise Box Plot")
+            st.info("Need 'WaterLevel' column for a box plot.")
 
     st.markdown("---")
     # Compact extras
@@ -468,8 +479,8 @@ with tabs[0]:
 
 # ---------------- Trends ---------------
 with tabs[1]:
-    st.markdown("## 📈 Time-Series & Heatmaps")
-    agg_pick = st.selectbox("Aggregation", ["mean","sum","max","min"], index=0)
+    st.markdown("## 📈 Time-Series & Daily Heatmap")
+    agg_pick = st.selectbox("Aggregation for time-series", ["mean","sum","max","min"], index=0)
     tmp = working[["Timestamp","WaterLevel"]].copy()
     tmp = tmp.dropna(subset=["Timestamp"])
     if tmp.empty:
@@ -483,21 +494,25 @@ with tabs[1]:
         st.plotly_chart(fig, use_container_width=True)
 
     st.markdown("---")
-    st.subheader("Hourly Heatmap (Avg WaterLevel)")
+    st.subheader("Daily Heatmap (Avg WaterLevel)")
     tmp2 = working[["Timestamp","WaterLevel"]].dropna(subset=["Timestamp"]).copy()
     if tmp2.empty:
         st.info("Not enough data for a heatmap.")
     else:
         tmp2["Timestamp"] = pd.to_datetime(tmp2["Timestamp"])
         ist_ts = ist(tmp2["Timestamp"])
-        tmp2["Hour"] = ist_ts.dt.hour
+        tmp2["Date"] = ist_ts.dt.date
         tmp2["DayOfWeek"] = ist_ts.dt.day_name()
-        heat = tmp2.groupby(["DayOfWeek","Hour"])["WaterLevel"].mean().reset_index()
+        # Week buckets (Mon-start)
+        week_start = ist_ts.dt.to_period("W-MON").apply(lambda p: p.start_time.date())
+        tmp2["WeekStart"] = week_start
+        heat = tmp2.groupby(["WeekStart","DayOfWeek"])["WaterLevel"].mean().reset_index()
+        # ensure day ordering
         dow = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
         heat["DayOfWeek"] = pd.Categorical(heat["DayOfWeek"], categories=dow, ordered=True)
-        heat = heat.sort_values(["DayOfWeek","Hour"])
-        pivot = heat.pivot(index="DayOfWeek", columns="Hour", values="WaterLevel")
-        fig = go.Figure(data=go.Heatmap(z=pivot.values, x=pivot.columns, y=pivot.index, coloraxis="coloraxis"))
+        heat = heat.sort_values(["WeekStart","DayOfWeek"])
+        pivot = heat.pivot(index="DayOfWeek", columns="WeekStart", values="WaterLevel")
+        fig = go.Figure(data=go.Heatmap(z=pivot.values, x=[str(x) for x in pivot.columns], y=pivot.index, coloraxis="coloraxis"))
         fig.update_layout(coloraxis=dict(colorscale="Viridis"))
         st.plotly_chart(fig, use_container_width=True)
 
@@ -520,8 +535,7 @@ with tabs[2]:
         if selected_dev == "Auto (top by readings)":
             counts = w.groupby("DeviceID").size().reset_index(name="Readings").sort_values("Readings", ascending=False)
             if counts.empty:
-                st.info("No device data available.")
-                st.stop()
+                st.info("No device data available."); st.stop()
             dev_id = counts.iloc[0]["DeviceID"]
         else:
             dev_id = selected_dev
@@ -585,30 +599,57 @@ with tabs[3]:
         else:
             st.info("No WaterLevel column.")
 
-# --------------- Feedback --------------
+# ------------- Device Location Map -------------
 with tabs[4]:
+    st.markdown("## 🗺️ Device Location (Unique DeviceID)")
+    if {"DeviceID","Latitude","Longitude"}.issubset(working.columns):
+        # last known location per device (non-null lat/lon)
+        loc = working.dropna(subset=["Latitude","Longitude","DeviceID"]).copy()
+        if "Timestamp" in loc.columns:
+            loc["Timestamp"] = pd.to_datetime(loc["Timestamp"], errors="coerce")
+            loc = loc.sort_values("Timestamp")
+            loc = loc.groupby("DeviceID").tail(1)
+        else:
+            loc = loc.drop_duplicates(subset=["DeviceID"], keep="last")
+
+        if not loc.empty:
+            # Optional filters
+            dtype_opts = sorted(loc["DeviceType"].dropna().unique().tolist()) if "DeviceType" in loc.columns else []
+            dtype_pick = st.multiselect("Filter by Device Type", options=dtype_opts, default=[])
+            if dtype_pick:
+                loc = loc[loc["DeviceType"].isin(dtype_pick)]
+
+            fig = px.scatter_mapbox(
+                loc, lat="Latitude", lon="Longitude",
+                hover_name="DeviceID",
+                hover_data=[c for c in ["Client","District","FarmerName","DeviceType"] if c in loc.columns],
+                zoom=4, height=500
+            )
+            fig.update_layout(mapbox_style="open-street-map")
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No device locations available (lat/lon missing).")
+    else:
+        st.info("Latitude/Longitude columns not found.")
+
+# --------------- Feedback --------------
+with tabs[5]:
     if st.session_state.role == "client":
         st.markdown("## 💬 Submit Feedback / Report Approval")
-        status = st.selectbox("Report status", ["Approved", "Not Approved", "Changes Required"])
-        comment = st.text_area("Comments (optional)")
+        status = st.selectbox("Report status", ["Approved", "Not Approved", "Changes Required"], key="fb_status")
+        comment = st.text_area("Comments (optional)", key="fb_comment")
 
         satisfaction = None
-        reason = ""
-        changes = ""
-
         if status == "Approved":
-            satisfaction = st.slider("Satisfaction rating", 1, 5, 5, help="1 = Very Low, 5 = Very High")
-        elif status == "Not Approved":
-            reason = st.text_area("Reason for rejection (required)")
-        elif status == "Changes Required":
-            changes = st.text_area("List the changes required (required)")
+            satisfaction = st.slider("Satisfaction rating", 1, 5, 5, help="1 = Very Low, 5 = Very High", key="fb_sat")
 
-        if st.button("Submit", type="primary"):
-            if status == "Approved":
-                pass
-            elif status == "Not Approved" and not reason.strip():
+        reason = st.text_area("Reason for rejection (required)", key="fb_reason") if status == "Not Approved" else ""
+        changes = st.text_area("List the changes required (required)", key="fb_changes") if status == "Changes Required" else ""
+
+        if st.button("Submit", type="primary", key="fb_submit"):
+            if status == "Not Approved" and not str(reason).strip():
                 st.warning("Please provide a reason for rejection."); st.stop()
-            elif status == "Changes Required" and not changes.strip():
+            if status == "Changes Required" and not str(changes).strip():
                 st.warning("Please list the required changes."); st.stop()
 
             row = {
@@ -616,9 +657,9 @@ with tabs[4]:
                 "Client": client_name,
                 "Status": status,
                 "Satisfaction": satisfaction if satisfaction is not None else "",
-                "Reason": reason.strip(),
-                "Changes": changes.strip(),
-                "Comment": comment.strip(),
+                "Reason": str(reason).strip() if isinstance(reason, str) else "",
+                "Changes": str(changes).strip() if isinstance(changes, str) else "",
+                "Comment": str(comment).strip() if isinstance(comment, str) else "",
                 "AdminComment": "",  # placeholder for admin
             }
             new_df = pd.DataFrame([row])
@@ -632,6 +673,14 @@ with tabs[4]:
                 out = new_df
             out.to_csv(FEEDBACK_FILE, index=False)
             st.success("✅ Submitted. Thank you!")
+
+            # Clear text fields after submit
+            st.session_state["fb_comment"] = ""
+            st.session_state["fb_reason"] = ""
+            st.session_state["fb_changes"] = ""
+            # You can also reset status/satisfaction if desired:
+            # st.session_state["fb_status"] = "Approved"
+            # st.session_state["fb_sat"] = 5
 
     else:
         st.markdown("## 💬 Client Feedbacks")
@@ -655,10 +704,10 @@ with tabs[4]:
                         sel_id = int(pick.split(']')[0][1:])
                     except Exception:
                         sel_id = None
-                    admin_note = st.text_area("Admin comment", value=str(fb.loc[sel_id, "AdminComment"]) if sel_id is not None else "")
+                    admin_note = st.text_area("Admin comment", value=str(fb.loc[sel_id, "AdminComment"]) if sel_id is not None else "", key="admin_note")
                     if st.button("Save Admin Comment"):
                         if sel_id is not None:
-                            fb.loc[sel_id, "AdminComment"] = admin_note.strip()
+                            fb.loc[sel_id, "AdminComment"] = str(admin_note).strip()
                             fb.to_csv(FEEDBACK_FILE, index=False)
                             st.success("💾 Saved admin comment.")
                         else:
