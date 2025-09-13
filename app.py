@@ -620,7 +620,7 @@ with tabs[4]:
 # --------------- Feedback --------------
 with tabs[5]:
     show_top_header()
-    st.markdown("#### All feedback is stored in: `feedbacks.csv` and per-entry JSON files under `feedback_history/`.")
+    ##st.markdown("#### All feedback is stored in: `feedbacks.csv` and per-entry JSON files under `feedback_history/`.")
     os.makedirs(FEEDBACK_DIR, exist_ok=True)
 
     if st.session_state.role == "client":
@@ -668,7 +668,7 @@ with tabs[5]:
             with open(json_path, "w", encoding="utf-8") as f:
                 json.dump(row, f, ensure_ascii=False, indent=2)
 
-            st.success("✅ Submitted. Thank you! (Saved to CSV + history file)")
+            ##st.success("✅ Submitted. Thank you! (Saved to CSV + history file)")
 
             reset_feedback_form()
 
