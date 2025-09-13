@@ -354,7 +354,7 @@ with tabs[0]:
             st.info("Column 'DeviceType' missing.")
 
     with gg2:
-        st.subheader("Field Officer-wise Number of Data")
+        st.subheader("Field Officer-wise No of Data")
         fo_col = pick_field_officer_column(working)
         if fo_col is None:
             st.info("Couldn't find a Field Officer column. Expected one of: FieldOfficer, FiledOfficer, FOName, etc.")
