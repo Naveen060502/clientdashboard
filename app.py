@@ -287,7 +287,7 @@ with tabs[0]:
 
     with g1:
         if st.session_state.role == "admin":
-            st.subheader("Client-wise Device Count (Pie)")
+            st.subheader("Client-wise Device Count")
             if {"Client","DeviceID"}.issubset(working.columns) and working["DeviceID"].notna().any():
                 cdc = working.groupby("Client")["DeviceID"].nunique().reset_index(name="DeviceCount")
                 cdc = cdc.sort_values("DeviceCount", ascending=False)
