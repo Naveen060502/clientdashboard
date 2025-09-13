@@ -445,7 +445,7 @@ with tabs[0]:
         else:
             st.info("No WaterLevel values to show.")
     with c2:
-        st.subheader("Top Portable Sensors by Readings")
+        st.subheader("Top Sensors by Readings")
         if "DeviceType" in working.columns and "DeviceID" in working.columns:
             portable = working[working["DeviceType"] == "Portable"]
             if not portable.empty:
