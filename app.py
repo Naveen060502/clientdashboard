@@ -213,7 +213,7 @@ def show_top_header():
         if os.path.exists(admin_logo):
             st.image(admin_logo, width=70)
     with c2:
-        st.markdown("## cultYvate Kharif 2025 Summary")
+        st.markdown("## cultYvate Kharif 2025 Summary Report")
     with c3:
         if os.path.exists(client_logo) and client_logo != admin_logo:
             st.image(client_logo, width=70)
@@ -264,6 +264,12 @@ def derive_status_counts(frame: pd.DataFrame, hours:int=DEFAULT_STATUS_HOURS) ->
     out = last_seen_by_dev.groupby("Status")["DeviceID"].nunique().reset_index(name="DeviceCount")
     return out
 
+def reset_feedback_form():
+    for k in ["fb_comment","fb_reason","fb_changes","fb_status","fb_sat"]:
+        if k in st.session_state:
+            st.session_state.pop(k)
+    st.rerun()
+
 # =====================================
 # ---------------- UI -----------------
 # =====================================
@@ -279,7 +285,7 @@ tabs = st.tabs([
 # ---------------- Dashboard ------------
 with tabs[0]:
     show_top_header()
-    st.markdown("### IoT Water Dashboard")
+    st.markdown("### 🌊 IoT Water Dashboard")
     kpi_metrics(working)
 
     st.markdown("---")
@@ -287,7 +293,7 @@ with tabs[0]:
 
     with g1:
         if st.session_state.role == "admin":
-            st.subheader("Client-wise Device Count")
+            st.subheader("Client-wise Device Count (Pie)")
             if {"Client","DeviceID"}.issubset(working.columns) and working["DeviceID"].notna().any():
                 cdc = working.groupby("Client")["DeviceID"].nunique().reset_index(name="DeviceCount")
                 cdc = cdc.sort_values("DeviceCount", ascending=False)
@@ -300,7 +306,7 @@ with tabs[0]:
             else:
                 st.info("Need 'Client' and 'DeviceID' columns.")
         else:
-            st.subheader("District-wise Device Count")
+            st.subheader("District-wise Device Count (Pie)")
             if {"District","DeviceID"}.issubset(working.columns) and working["DeviceID"].notna().any():
                 ddc = working.groupby("District")["DeviceID"].nunique().reset_index(name="DeviceCount")
                 ddc = ddc.sort_values("DeviceCount", ascending=False)
@@ -314,7 +320,7 @@ with tabs[0]:
                 st.info("Need 'District' and 'DeviceID' columns.")
 
     with g2:
-        st.subheader("Status-wise Device Count")
+        st.subheader("Status-wise Device Count (Donut)")
         sc = derive_status_counts(working, hours=DEFAULT_STATUS_HOURS)
         if not sc.empty:
             fig = px.pie(sc, names="Status", values="DeviceCount", hole=0.45)
@@ -327,11 +333,10 @@ with tabs[0]:
 
     gg1, gg2 = st.columns([1,1])
     with gg1:
-        # CHANGED: role-dependent "number of data (Portable only)"
         if "DeviceType" in working.columns:
             portable = working[working["DeviceType"] == "Portable"]
             if st.session_state.role == "admin":
-                st.subheader("Client-wise Number of Data")
+                st.subheader("Client-wise Number of Data (Portable only)")
                 if not portable.empty:
                     cnd = portable.groupby("Client").size().reset_index(name="Rows")
                     cnd = cnd.sort_values("Rows", ascending=False)
@@ -341,7 +346,7 @@ with tabs[0]:
                 else:
                     st.info("No Portable device rows in current selection.")
             else:
-                st.subheader("District-wise Number of Data")
+                st.subheader("District-wise Number of Data (Portable only)")
                 if not portable.empty and "District" in portable.columns:
                     dnd = portable.groupby("District").size().reset_index(name="Rows")
                     dnd = dnd.sort_values("Rows", ascending=False)
@@ -354,7 +359,7 @@ with tabs[0]:
             st.info("Column 'DeviceType' missing.")
 
     with gg2:
-        st.subheader("Field Officer-wise No of Data")
+        st.subheader("Field Officer-wise Number of Data (Portable only)")
         fo_col = pick_field_officer_column(working)
         if fo_col is None:
             st.info("Couldn't find a Field Officer column. Expected one of: FieldOfficer, FiledOfficer, FOName, etc.")
@@ -369,7 +374,6 @@ with tabs[0]:
             else:
                 st.info("No Portable device rows for Field Officer chart.")
 
-    # Client-only extra charts
     if st.session_state.role == "client":
         st.markdown("---")
         st.markdown("### 👥 Farmers & Devices by Geography")
@@ -422,9 +426,8 @@ with tabs[0]:
             else:
                 st.info("No village device data.")
 
-        # WaterStatus PIE
         if "WaterStatus" in working.columns:
-            st.subheader("WaterStatus-wise Distribution")
+            st.subheader("WaterStatus-wise Distribution (Pie)")
             ws = working.groupby("WaterStatus").size().reset_index(name="Count")
             if not ws.empty:
                 fig = px.pie(ws, names="WaterStatus", values="Count")
@@ -445,7 +448,7 @@ with tabs[0]:
         else:
             st.info("No WaterLevel values to show.")
     with c2:
-        st.subheader("Top Sensors by Readings")
+        st.subheader("Top Portable Sensors by Readings")
         if "DeviceType" in working.columns and "DeviceID" in working.columns:
             portable = working[working["DeviceType"] == "Portable"]
             if not portable.empty:
@@ -585,7 +588,7 @@ with tabs[3]:
 # ------------- Device Location Map -------------
 with tabs[4]:
     show_top_header()
-    st.markdown("### 🗺️ Device Location ")
+    st.markdown("### 🗺️ Device Location (Unique DeviceID)")
     if {"DeviceID","Latitude","Longitude"}.issubset(working.columns):
         loc = working.dropna(subset=["Latitude","Longitude","DeviceID"]).copy()
         if "Timestamp" in loc.columns:
@@ -617,8 +620,7 @@ with tabs[4]:
 # --------------- Feedback --------------
 with tabs[5]:
     show_top_header()
-    ##st.markdown("#### All feedback is stored in: `feedbacks.csv` and per-entry JSON files under `feedback_history/`.")
-
+    st.markdown("#### All feedback is stored in: `feedbacks.csv` and per-entry JSON files under `feedback_history/`.")
     os.makedirs(FEEDBACK_DIR, exist_ok=True)
 
     if st.session_state.role == "client":
@@ -630,8 +632,8 @@ with tabs[5]:
         if status == "Approved":
             satisfaction = st.slider("Satisfaction rating", 1, 5, 5, help="1 = Very Low, 5 = Very High", key="fb_sat")
 
-        reason = st.text_area("Reason for rejection (**required)", key="fb_reason") if status == "Not Approved" else ""
-        changes = st.text_area("List the changes required (**required)", key="fb_changes") if status == "Changes Required" else ""
+        reason = st.text_area("Reason for rejection (required)", key="fb_reason") if status == "Not Approved" else ""
+        changes = st.text_area("List the changes required (required)", key="fb_changes") if status == "Changes Required" else ""
 
         if st.button("Submit", type="primary", key="fb_submit"):
             if status == "Not Approved" and not str(reason).strip():
@@ -662,17 +664,13 @@ with tabs[5]:
                 out = new_df
             out.to_csv(FEEDBACK_FILE, index=False)
 
-            # Write per-entry JSON history
             json_path = os.path.join(FEEDBACK_DIR, f"{fb_id}.json")
             with open(json_path, "w", encoding="utf-8") as f:
                 json.dump(row, f, ensure_ascii=False, indent=2)
 
             st.success("✅ Submitted. Thank you! (Saved to CSV + history file)")
 
-            # Clear text fields after submit
-            st.session_state["fb_comment"] = ""
-            st.session_state["fb_reason"] = ""
-            st.session_state["fb_changes"] = ""
+            reset_feedback_form()
 
     else:
         st.markdown("### 💬 Client Feedbacks")
@@ -681,7 +679,6 @@ with tabs[5]:
             if "AdminComment" not in fb.columns:
                 fb["AdminComment"] = ""
             if "ID" not in fb.columns:
-                # Backfill IDs for legacy rows
                 fb["ID"] = [f"legacy_{i}" for i in range(len(fb))]
                 fb.to_csv(FEEDBACK_FILE, index=False)
 
@@ -708,7 +705,7 @@ with tabs[5]:
                             fb.loc[sel_row_index, "AdminComment"] = str(admin_note).strip()
                             fb.to_csv(FEEDBACK_FILE, index=False)
 
-                            # Also update (or create) the JSON history file
+                            os.makedirs(FEEDBACK_DIR, exist_ok=True)
                             fb_id = str(fb.loc[sel_row_index, "ID"])
                             json_path = os.path.join(FEEDBACK_DIR, f"{fb_id}.json")
                             row_dict = fb.loc[sel_row_index].to_dict()
