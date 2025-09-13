@@ -213,7 +213,7 @@ def show_top_header():
         if os.path.exists(admin_logo):
             st.image(admin_logo, width=70)
     with c2:
-        st.markdown("## cultYvate Kharif 2025 Summary Report")
+        st.markdown("## cultYvate Kharif 2025 Summary")
     with c3:
         if os.path.exists(client_logo) and client_logo != admin_logo:
             st.image(client_logo, width=70)
@@ -279,7 +279,7 @@ tabs = st.tabs([
 # ---------------- Dashboard ------------
 with tabs[0]:
     show_top_header()
-    st.markdown("### 🌊 IoT Water Dashboard")
+    st.markdown("### IoT Water Dashboard")
     kpi_metrics(working)
 
     st.markdown("---")
@@ -300,7 +300,7 @@ with tabs[0]:
             else:
                 st.info("Need 'Client' and 'DeviceID' columns.")
         else:
-            st.subheader("District-wise Device Count (Pie)")
+            st.subheader("District-wise Device Count")
             if {"District","DeviceID"}.issubset(working.columns) and working["DeviceID"].notna().any():
                 ddc = working.groupby("District")["DeviceID"].nunique().reset_index(name="DeviceCount")
                 ddc = ddc.sort_values("DeviceCount", ascending=False)
@@ -314,7 +314,7 @@ with tabs[0]:
                 st.info("Need 'District' and 'DeviceID' columns.")
 
     with g2:
-        st.subheader("Status-wise Device Count (Donut)")
+        st.subheader("Status-wise Device Count")
         sc = derive_status_counts(working, hours=DEFAULT_STATUS_HOURS)
         if not sc.empty:
             fig = px.pie(sc, names="Status", values="DeviceCount", hole=0.45)
@@ -331,7 +331,7 @@ with tabs[0]:
         if "DeviceType" in working.columns:
             portable = working[working["DeviceType"] == "Portable"]
             if st.session_state.role == "admin":
-                st.subheader("Client-wise Number of Data (Portable only)")
+                st.subheader("Client-wise Number of Data")
                 if not portable.empty:
                     cnd = portable.groupby("Client").size().reset_index(name="Rows")
                     cnd = cnd.sort_values("Rows", ascending=False)
@@ -341,7 +341,7 @@ with tabs[0]:
                 else:
                     st.info("No Portable device rows in current selection.")
             else:
-                st.subheader("District-wise Number of Data (Portable only)")
+                st.subheader("District-wise Number of Data")
                 if not portable.empty and "District" in portable.columns:
                     dnd = portable.groupby("District").size().reset_index(name="Rows")
                     dnd = dnd.sort_values("Rows", ascending=False)
@@ -354,7 +354,7 @@ with tabs[0]:
             st.info("Column 'DeviceType' missing.")
 
     with gg2:
-        st.subheader("Field Officer-wise Number of Data (Portable only)")
+        st.subheader("Field Officer-wise Number of Data")
         fo_col = pick_field_officer_column(working)
         if fo_col is None:
             st.info("Couldn't find a Field Officer column. Expected one of: FieldOfficer, FiledOfficer, FOName, etc.")
@@ -424,7 +424,7 @@ with tabs[0]:
 
         # WaterStatus PIE
         if "WaterStatus" in working.columns:
-            st.subheader("WaterStatus-wise Distribution (Pie)")
+            st.subheader("WaterStatus-wise Distribution")
             ws = working.groupby("WaterStatus").size().reset_index(name="Count")
             if not ws.empty:
                 fig = px.pie(ws, names="WaterStatus", values="Count")
@@ -585,7 +585,7 @@ with tabs[3]:
 # ------------- Device Location Map -------------
 with tabs[4]:
     show_top_header()
-    st.markdown("### 🗺️ Device Location (Unique DeviceID)")
+    st.markdown("### 🗺️ Device Location ")
     if {"DeviceID","Latitude","Longitude"}.issubset(working.columns):
         loc = working.dropna(subset=["Latitude","Longitude","DeviceID"]).copy()
         if "Timestamp" in loc.columns:
@@ -630,8 +630,8 @@ with tabs[5]:
         if status == "Approved":
             satisfaction = st.slider("Satisfaction rating", 1, 5, 5, help="1 = Very Low, 5 = Very High", key="fb_sat")
 
-        reason = st.text_area("Reason for rejection (required)", key="fb_reason") if status == "Not Approved" else ""
-        changes = st.text_area("List the changes required (required)", key="fb_changes") if status == "Changes Required" else ""
+        reason = st.text_area("Reason for rejection (**required)", key="fb_reason") if status == "Not Approved" else ""
+        changes = st.text_area("List the changes required (**required)", key="fb_changes") if status == "Changes Required" else ""
 
         if st.button("Submit", type="primary", key="fb_submit"):
             if status == "Not Approved" and not str(reason).strip():
